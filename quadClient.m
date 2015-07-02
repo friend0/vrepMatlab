@@ -1,0 +1,137 @@
+function quadClient()
+    pause on;
+    disp('Program started');
+    
+    % Connection parameters
+    IPADDRESS                           = '127.0.0.1';
+    PORT                                = 20146;
+    WAIT_UNTIL_CONNECTED                = true;
+    DO_NOT_RECONNECT_ONCE_DISCONNECTED  = true;
+    TIME_OUT_IN_MSEC                    = 5000;
+    COMM_THREAD_CYCLE_IN_MS             = 1;
+
+    % Load the V-REP remote API
+    vrep = remApi('remoteApi');
+   vrep.simxFinish(-1); % just in case, close all opened connections
+
+    % Start the simulation on the server
+    clientID = vrep.simxStart(IPADDRESS, PORT, ...
+    WAIT_UNTIL_CONNECTED, DO_NOT_RECONNECT_ONCE_DISCONNECTED, ...
+    TIME_OUT_IN_MSEC, COMM_THREAD_CYCLE_IN_MS);
+
+    if clientID == -1
+           disp('Failed connecting to remote API server');
+    end
+
+    targetObj= getObjectHandle(vrep, clientID, 'Quadricopter_target');
+     
+% try/catch to avoid fatal errors messing up the server
+try
+    if (clientID > -1)
+        
+        fprintf('Connected to remote API server as client %d\n', clientID);        
+        % Grab handles from V-REP server
+        
+        %Actuators --------------------------------------------------------
+        prop1Handle = getObjectHandle(vrep, clientID, 'Quadricopter_propeller1');
+        prop2Handle = getObjectHandle(vrep, clientID, 'Quadricopter_propeller2');
+        prop3Handle = getObjectHandle(vrep, clientID, 'Quadricopter_propeller3');
+        prop4Handle = getObjectHandle(vrep, clientID, 'Quadricopter_propeller4');
+        
+        propellerRespondable1 = getObjectHandle(vrep, clientID, 'Quadricopter_propeller_respondable1');
+        propellerRespondable2 = getObjectHandle(vrep, clientID, 'Quadricopter_propeller_respondable2');
+        propellerRespondable3 = getObjectHandle(vrep, clientID, 'Quadricopter_propeller_respondable3');
+        propellerRespondable4 = getObjectHandle(vrep, clientID, 'Quadricopter_propeller_respondable4');        
+
+        % Start the simulation --------------------------------------------
+        if vrep.simxStartSimulation(clientID, vrep.simx_opmode_oneshot_wait)            
+            fprintf('Failed to start simulation\n')
+            return            
+        end
+        
+        % Initialize previous motor commands for tracking movement update
+        prop1Prev = 0;
+        prop2Prev = 0;
+        prop3Prev = 0;
+        prop4Prev = 0;
+                
+        motorCommand = 1000;
+        t = linspace(0, 10*pi);
+        x = 0;
+        % Loop until the action function returns an empty action for the
+        while true
+            if x > 99
+                x = 0;
+            end
+            x = x + 1;
+
+            err = 0;
+            [err, robotPosition] = vrep.simxGetObjectPosition (clientID, targetObj ,-1, vrep.simx_opmode_oneshot_wait);
+            sprintf('targetPos:%d\n', robotPosition(1))
+            %robotPosition(1) = robotPosition(1) + .01;
+            %robotPosition(2) = robotPosition(2) + .01;            
+            robotPosition(3) = robotPosition(3) + .1*sin(t(x)/5);
+
+            vrep.simxSetObjectPosition(clientID, targetObj, -1, robotPosition, vrep.simx_opmode_oneshot)                
+
+        end
+        
+        % Stop the simulation on the server
+        vrep.simxStopSimulation(clientID, vrep.simx_opmode_oneshot_wait);
+        
+    else
+        error('Failed connecting to remote API server')
+    end
+    
+    % Clean up
+    close(gcf)
+    display('Done')
+    vrep.simxFinish(clientID)
+    vrep.delete(); % call the destructor
+    
+    % Handle all failures with a helpful stack trace
+catch err
+    close(gcf)
+    fprintf('Error: %s\nTrace:\n', err.message)
+    for k = 1:length(err.stack)
+        level = err.stack(k);
+        fprintf('On line %d of function %s in file %s\n', ...
+            level.line, level.name, level.file)
+    end
+    vrep.simxStopSimulation(clientID, vrep.simx_opmode_oneshot_wait);
+    vrep.simxFinish(clientID); % close the line if still open
+    vrep.delete(); % call the destructor   
+    disp('Program ended');
+end     %End 'Try catch' 
+
+end     %End quadClient
+
+% Helper functions --------------------------------------------------------
+function check(vrep, retVal, textError, textNoError)
+     if (retVal==vrep.simx_error_noerror)
+         disp(textNoError);
+     else
+        disp(textError);
+     end
+end
+
+function handle = getObjectHandle(vrep, clientID, objectName)
+    [errorCode,handle] = vrep.simxGetObjectHandle(clientID, objectName, vrep.simx_opmode_oneshot_wait);
+    if errorCode
+        error('Failed to get object named %s', objectName)
+    else
+        sprintf('Got Object %s', objectName)
+    end
+end
+
+function detectionState = readSensor(vrep, clientID, sensorHandle)
+    [errorCode,detectionState] = vrep.simxReadProximitySensor(clientID, sensorHandle, vrep.simx_opmode_continuous);
+    if errorCode
+        detectionState = 0;
+    end
+end
+
+function setMotorSpeed(vrep, clientID, jointHandle, motorSpeed)
+    vrep.simxSetJointTargetVelocity(clientID, jointHandle,  motorSpeed, vrep.simx_opmode_oneshot);
+end
+

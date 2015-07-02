@@ -1,0 +1,79 @@
+function quadControl()
+    pause on;
+    disp('Program started');
+    
+    % Connection parameters
+    IPADDRESS                           = '127.0.0.1';
+    PORT                                = 19999;
+    WAIT_UNTIL_CONNECTED                = true;
+    DO_NOT_RECONNECT_ONCE_DISCONNECTED  = true;
+    TIME_OUT_IN_MSEC                    = 5000;
+    COMM_THREAD_CYCLE_IN_MS             = 1;
+
+    % Load the V-REP remote API
+    vrep = remApi('remoteApi');
+   vrep.simxFinish(-1); % just in case, close all opened connections
+
+    % Start the simulation on the server
+    clientID = vrep.simxStart(IPADDRESS, PORT, ...
+    WAIT_UNTIL_CONNECTED, DO_NOT_RECONNECT_ONCE_DISCONNECTED, ...
+    TIME_OUT_IN_MSEC, COMM_THREAD_CYCLE_IN_MS);
+
+    if clientID == -1
+           disp('Failed connecting to remote API server');
+    end
+
+    %Detatch the manipulation sphere:
+    targetObj= vrep.simxGetObjectHandle('Quadricopter_target');
+    vrep.simxSetObjectParent(targetObj,-1,true);
+        
+    [retVal,prop1] = vrep.simxGetObjectHandle(clientID,'prop1',vrep.simx_opmode_oneshot_wait);
+    check(vrep,retVal, 'failed to get prop1', 'got prop1');
+    [retVal,prop2] = vrep.simxGetObjectHandle(clientID,'prop2',vrep.simx_opmode_oneshot_wait);
+    check(vrep,retVal, 'failed to get prop2', 'got prop2');
+    [retVal,prop3] = vrep.simxGetObjectHandle(clientID,'prop3',vrep.simx_opmode_oneshot_wait);
+    check(vrep,retVal, 'failed to get prop3', 'got prop3');
+    [retVal,prop4] = vrep.simxGetObjectHandle(clientID,'prop4',vrep.simx_opmode_oneshot_wait);
+    check(vrep,retVal, 'failed to get prop4', 'got prop4');
+    
+    
+    [retVal,noseSensor] = vrep.simxGetObjectHandle(clientID,'remoteApiControlledBubbleRobSensingNose',vrep.simx_opmode_oneshot_wait);
+    check(vrep,retVal, 'failed to get nose sensor', 'got nose sensor');
+     
+     [retVal, vel] = vrep.simxGetObjectFloatParameter(clientID, leftMotor, 2012, vrep.simx_opmode_oneshot_wait);
+      vel
+     
+     [retVal]=vrep.simxSetJointTargetVelocity(clientID,leftMotor,3*pi,vrep.simx_opmode_oneshot_wait);
+     check(vrep,retVal, 'velocity left failed', 'velocity left set');
+     
+     [retVal]=vrep.simxSetJointTargetVelocity(clientID,rightMotor,pi,vrep.simx_opmode_oneshot_wait);
+     check(vrep,retVal, 'velocity right failed', 'velocity right set');
+    
+    vrep.simxAddStatusbarMessage(clientID, 'this is a test', vrep.simx_opmode_oneshot_wait);
+    
+     [retVal, vel] = vrep.simxGetObjectFloatParameter(clientID, leftMotor, 2012, vrep.simx_opmode_oneshot_wait);
+      vrep.simxAddStatusbarMessage(clientID, 'this is a test', vrep.simx_opmode_oneshot_wait);
+     
+   try
+      while (vrep.simxGetConnectionId(clientID)>-1)
+          pause(.001)
+        %[retVal, nose] = vrep.simReadProximitySensor(noseSensor);
+        %nose
+      end
+        disp('exiting');
+      vrep.delete(); % call the destructor!
+   catch err
+      vrep.simxFinish(clientID); % close the line if still open
+      vrep.delete(); % call the destructor!
+   end;
+   
+   disp('Program ended');
+end
+
+function check(vrep, retVal, textError, textNoError)
+     if (retVal==vrep.simx_error_noerror)
+         disp(textNoError);
+     else
+        disp(textError);
+     end
+end
